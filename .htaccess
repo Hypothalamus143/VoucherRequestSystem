@@ -1,0 +1,11 @@
+Options -Indexes
+
+# Deny direct access to config files
+<FilesMatch "\.(sql|md|xml|env)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# PHP error settings for production (adjust for dev)
+# php_flag display_errors Off
+# php_flag log_errors On
