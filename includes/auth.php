@@ -10,8 +10,15 @@ if (session_status() === PHP_SESSION_NONE) {
  * Ensure the visitor is a logged-in student.
  * Redirects to login if not authenticated.
  */
-function requireStudent(): void {
-    if (empty($_SESSION['user_id']) || ($_SESSION['user_type'] ?? '') !== 'S') {
+function requireTSG() {
+    if (empty($_SESSION['user_id']) || $_SESSION['user_type'] !== 'T') {
+        header('Location: /index.php');
+        exit;
+    }
+}
+
+function requireStudent() {
+    if (empty($_SESSION['user_id']) || $_SESSION['user_type'] !== 'S') {
         header('Location: /index.php');
         exit;
     }

@@ -1,7 +1,7 @@
 <?php
-// student/post-reply.php — Handle reply submission (AJAX-capable)
+// tsg/post-reply.php — Handle reply submission for TSG
 require_once __DIR__ . '/../includes/auth.php';
-requireStudent();
+requireTSG();
 
 header('Content-Type: application/json');
 
@@ -12,7 +12,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $uid           = currentUserId();
-$student       = currentStudent();
 $parentId      = (int)($_POST['parent_id'] ?? 0);
 $isFromRequest = (int)($_POST['is_from_request'] ?? 0);
 $message       = trim($_POST['message'] ?? '');
@@ -24,25 +23,30 @@ if ($parentId <= 0 || $message === '') {
 
 $conn = getConnection();
 
-// If isFromRequest=1, verify the request belongs to this student
+// If isFromRequest=1, verify the request exists (TSG can reply to any request)
 if ($isFromRequest) {
     $stmt = $conn->prepare(
-        'SELECT r.requestID FROM Request r
-         JOIN Student s ON s.studID = r.studID
-         WHERE r.requestID = ? AND s.userID = ? LIMIT 1'
+        'SELECT requestID FROM Request WHERE requestID = ? LIMIT 1'
     );
-    $stmt->bind_param('ii', $parentId, $uid);
+    $stmt->bind_param('i', $parentId);
     $stmt->execute();
-    $owns = $stmt->get_result()->fetch_assoc();
+    $exists = $stmt->get_result()->fetch_assoc();
     $stmt->close();
 
-    if (!$owns) {
+    if (!$exists) {
         $conn->close();
         http_response_code(403);
-        echo json_encode(['error' => 'Forbidden.']);
+        echo json_encode(['error' => 'Request not found.']);
         exit;
     }
 }
+
+// Get TSG user info for response
+$stmt = $conn->prepare('SELECT fname, lname FROM User WHERE userID = ?');
+$stmt->bind_param('i', $uid);
+$stmt->execute();
+$tsg = $stmt->get_result()->fetch_assoc();
+$stmt->close();
 
 // FIXED: Correct parameter types - 'i' for integer, 's' for string
 $stmt = $conn->prepare(
@@ -63,9 +67,9 @@ if ($stmt->execute()) {
             'userID'        => $uid,
             'datetime'      => date('Y-m-d H:i:s'),
             'message'       => $message,
-            'fname'         => $student['fname'],
-            'lname'         => $student['lname'],
-            'user_type'     => 'S',
+            'fname'         => $tsg['fname'],
+            'lname'         => $tsg['lname'],
+            'user_type'     => 'T',
             'isFromRequest' => $isFromRequest,
         ],
     ]);

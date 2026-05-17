@@ -1,36 +1,36 @@
 <?php
-// student/request.php — View a single request and its reply thread
+// tsg/request.php — View a single request and its reply thread (TSG Version)
 require_once __DIR__ . '/../includes/auth.php';
-requireStudent();
+requireTSG();
 
-$student   = currentStudent();
-$uid       = currentUserId();
 $requestId = (int)($_GET['id'] ?? 0);
 $error     = '';
 
 if ($requestId <= 0) {
-    header('Location: /student/dashboard.php');
+    header('Location: /tsg/dashboard.php');
     exit;
 }
 
 $conn = getConnection();
 
-// Fetch request — must belong to this student
+// Fetch request (no student restriction - TSG can view any request)
 $stmt = $conn->prepare(
-    'SELECT r.requestID, r.datetime, r.message, r.isAccomplished
+    'SELECT r.requestID, r.datetime, r.message, r.isAccomplished,
+            s.studID, u.fname, u.lname, u.mname
      FROM Request r
      JOIN Student s ON s.studID = r.studID
-     WHERE r.requestID = ? AND s.userID = ?
+     JOIN User u ON u.userID = s.userID
+     WHERE r.requestID = ?
      LIMIT 1'
 );
-$stmt->bind_param('ii', $requestId, $uid);
+$stmt->bind_param('i', $requestId);
 $stmt->execute();
 $request = $stmt->get_result()->fetch_assoc();
 $stmt->close();
 
 if (!$request) {
     $conn->close();
-    header('Location: /student/dashboard.php');
+    header('Location: /tsg/dashboard.php');
     exit;
 }
 
@@ -71,18 +71,23 @@ function fetchReplies(mysqli $conn, int $requestId): array {
 
 $replies = fetchReplies($conn, $requestId);
 
-// Handle delete request
+// Handle mark as accomplished
+if (isset($_POST['mark_accomplished'])) {
+    $stmt = $conn->prepare('UPDATE Request SET isAccomplished = 1 WHERE requestID = ?');
+    $stmt->bind_param('i', $requestId);
+    $stmt->execute();
+    $stmt->close();
+    $request['isAccomplished'] = 1; // Update local variable
+}
+
+// Handle delete request (TSG can also delete requests)
 if (isset($_POST['delete_request'])) {
-    $stmt = $conn->prepare(
-        'DELETE r FROM Request r
-         JOIN Student s ON s.studID = r.studID
-         WHERE r.requestID = ? AND s.userID = ?'
-    );
-    $stmt->bind_param('ii', $requestId, $uid);
+    $stmt = $conn->prepare('DELETE FROM Request WHERE requestID = ?');
+    $stmt->bind_param('i', $requestId);
     $stmt->execute();
     $stmt->close();
     $conn->close();
-    header('Location: /student/dashboard.php?deleted=1');
+    header('Location: /tsg/dashboard.php?deleted=1');
     exit;
 }
 
@@ -99,7 +104,7 @@ include __DIR__ . '/../includes/header.php';
 
 <div class="app-layout">
     <header class="topbar">
-        <a class="topbar-logo" href="/student/dashboard.php">
+        <a class="topbar-logo" href="/tsg/dashboard.php">
             <img src="/public/assets/cit-logo.png" alt="CIT-U" onerror="this.style.display='none'">
             <span>
                 Voucher Request System
@@ -108,22 +113,22 @@ include __DIR__ . '/../includes/header.php';
         </a>
         <div class="topbar-actions">
             <div class="topbar-user">
-                <strong><?= htmlspecialchars($student['fname'] . ' ' . $student['lname']) ?></strong>
-                Student
+                <strong>TSG Staff</strong>
+                Administrator
             </div>
-            <a href="/student/logout.php" class="topbar-logout">Log Out</a>
+            <a href="/tsg/logout.php" class="topbar-logout">Log Out</a>
         </div>
     </header>
 
     <main class="page-content">
-        <a href="/student/dashboard.php" class="back-link">← Back to Dashboard</a>
+        <a href="/tsg/dashboard.php" class="back-link">← Back to Dashboard</a>
 
         <?php if (!empty($_GET['submitted'])): ?>
             <div class="alert alert-success">Reply submitted successfully!</div>
         <?php endif; ?>
 
-        <?php if (!empty($_GET['deleted'])): ?>
-            <div class="alert alert-success">Request deleted successfully!</div>
+        <?php if (isset($_POST['mark_accomplished'])): ?>
+            <div class="alert alert-success">Request marked as accomplished!</div>
         <?php endif; ?>
 
         <!-- Request detail -->
@@ -139,13 +144,25 @@ include __DIR__ . '/../includes/header.php';
         <div class="detail-card">
             <div class="detail-card-meta">
                 <span>📅 <?= formatDate($request['datetime']) ?></span>
+                <span>👤 Student: <?= htmlspecialchars($request['fname'] . ' ' . $request['lname']) ?> (ID: <?= $request['studID'] ?>)</span>
             </div>
             <div class="detail-card-msg">
                 <?= $request['message'] ? nl2br(htmlspecialchars($request['message'])) : '<em style="color:var(--grey-400)">No message provided.</em>' ?>
             </div>
         </div>
 
-        <!-- Delete request -->
+        <!-- Mark as Accomplished Button (only if not already accomplished) -->
+        <?php if (!$request['isAccomplished']): ?>
+            <form method="POST" style="margin-bottom:1.5rem;">
+                <button type="submit" name="mark_accomplished"
+                        class="btn btn-sm btn-success"
+                        data-confirm="Mark this request as accomplished?">
+                    ✓ Mark as Accomplished
+                </button>
+            </form>
+        <?php endif; ?>
+
+        <!-- Delete request button -->
         <form method="POST" style="margin-bottom:1.5rem;">
             <button type="submit" name="delete_request"
                     class="btn btn-sm btn-danger"
@@ -161,13 +178,13 @@ include __DIR__ . '/../includes/header.php';
                 <!-- This will be populated by JavaScript -->
             </div>
 
-            <!-- Compose reply -->
+            <!-- Compose reply - ADD THIS BACK -->
             <div class="reply-compose">
                 <div id="replying-to" style="display:none; font-size:.8rem; color:var(--maroon); margin-bottom:.5rem; align-items:center; gap:.5rem;">
                     <span id="replying-to-label"></span>
                     <button id="cancel-reply-to" style="background:none;border:none;cursor:pointer;color:var(--grey-400);font-size:.8rem;">✕ cancel</button>
                 </div>
-                <form id="reply-form" method="POST" action="/student/post-reply.php">
+                <form id="reply-form" method="POST" action="/tsg/post-reply.php">
                     <input type="hidden" name="request_id" value="<?= $requestId ?>">
                     <input type="hidden" name="parent_id"  value="<?= $requestId ?>" id="parent-id-input">
                     <input type="hidden" name="is_from_request" value="1" id="is-from-request-input">
